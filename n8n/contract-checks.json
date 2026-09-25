@@ -1,0 +1,51 @@
+{
+  "name": "Helm Track — Safe contract checks (no emails)",
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "saveDataSuccessExecution": "none",
+    "saveDataErrorExecution": "none",
+    "saveManualExecutions": false,
+    "executionTimeout": 120,
+    "timezone": "America/Chicago"
+  },
+  "nodes": [
+    {
+      "id": "b98354ed-fa53-4b88-86b5-8d5989495eee",
+      "name": "Run checks",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        0,
+        0
+      ],
+      "parameters": {}
+    },
+    {
+      "id": "f7fe960c-6fb4-4222-86a8-63ec5e44f9e8",
+      "name": "Contract checks",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        240,
+        0
+      ],
+      "parameters": {
+        "jsCode": "function validateDispatch(payload, expectedOrigin, clock = Date.now()) {\n  if (!expectedOrigin || !/^https:\\/\\/[a-z0-9.-]+(?::[0-9]+)?$/i.test(expectedOrigin)) {\n    throw new Error('Configure the HTTPS app origin in this node before enabling delivery.');\n  }\n  const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;\n  if (!payload || payload.schema_version !== 1 || !uuid.test(payload.delivery_id || '') || !uuid.test(payload.event_id || '')) {\n    throw new Error('Invalid notification envelope.');\n  }\n  if (typeof payload.capability !== 'string' || !/^[0-9a-f]{64}$/.test(payload.capability)) {\n    throw new Error('Invalid notification capability.');\n  }\n  if (!Number.isFinite(payload.timestamp) || Math.abs(clock - payload.timestamp) > 300000) {\n    throw new Error('Expired notification envelope.');\n  }\n  if (payload.base_url !== expectedOrigin) throw new Error('Application origin does not match the configured allowlist.');\n  return { delivery_id: payload.delivery_id, event_id: payload.event_id, capability: payload.capability, base_url: expectedOrigin };\n}\n\nfunction classifyOutcome(response, executionId) {\n  const code = Number(response.statusCode || 0);\n  const body = response.body || {};\n  if (code >= 200 && code < 300 && typeof body.id === 'string' && body.id) {\n    return { state: 'provider-accepted', provider_id: body.id, execution_id: String(executionId) };\n  }\n  if (code === 429 || code >= 500 || !code || code >= 200 && code < 300) {\n    return { state: 'uncertain', error: 'unknown_outcome', execution_id: String(executionId) };\n  }\n  return { state: 'failed', error: 'provider_rejected', execution_id: String(executionId) };\n}\n\nconst origin='https://helm.example';\nconst payload={schema_version:1,delivery_id:'11111111-1111-4111-8111-111111111111',event_id:'22222222-2222-4222-8222-222222222222',capability:'a'.repeat(64),timestamp:Date.now(),base_url:origin};\nlet passed=0;\nfunction check(condition,name){if(!condition)throw new Error('FAILED: '+name);passed++;}\ncheck(validateDispatch(payload,origin).event_id===payload.event_id,'valid event');\nfor(const [name,change] of [['replay',{timestamp:0}],['untrusted origin',{base_url:'https://evil.example'}],['invalid capability',{capability:'short'}],['wrong schema',{schema_version:2}]]){let rejected=false;try{validateDispatch({...payload,...change},origin);}catch{rejected=true;}check(rejected,name);}\ncheck(classifyOutcome({statusCode:200,body:{id:'test-message'}},'test').state==='provider-accepted','provider accepted');\ncheck(classifyOutcome({statusCode:429},'test').state==='uncertain','rate limit');\ncheck(classifyOutcome({statusCode:503},'test').state==='uncertain','provider outage');\ncheck(classifyOutcome({error:'network'},'test').state==='uncertain','network uncertainty');\ncheck(classifyOutcome({statusCode:422},'test').state==='failed','validation rejection');\ncheck(classifyOutcome({statusCode:200,body:{}},'test').state==='uncertain','missing provider id');\nreturn [{json:{result:'PASS',checks:passed,scope:'Envelope validation and provider outcome classification only. No email sent; no live backend connection tested.'}}];"
+      }
+    }
+  ],
+  "connections": {
+    "Run checks": {
+      "main": [
+        [
+          {
+            "node": "Contract checks",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  }
+}

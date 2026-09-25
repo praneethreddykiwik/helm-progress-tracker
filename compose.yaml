@@ -1,0 +1,22 @@
+services:
+  web:
+    build: .
+    env_file: .env
+    environment:
+      NODE_ENV: production
+    ports:
+      - "127.0.0.1:3001:3001"
+    restart: unless-stopped
+    volumes:
+      - helm_runtime:/app/.data
+  worker:
+    build: .
+    command: ["node", "--import", "tsx", "server/worker.ts"]
+    env_file: .env
+    environment:
+      NODE_ENV: production
+    restart: unless-stopped
+    volumes:
+      - helm_runtime:/app/.data
+volumes:
+  helm_runtime:

@@ -1,0 +1,12 @@
+import {randomUUID} from 'node:crypto';
+import {db,migrate,now} from '../server/db.js';
+import {passwordHash} from '../server/auth.js';
+const email=process.env.ADMIN_EMAIL?.trim().toLowerCase();
+const name=process.env.ADMIN_NAME?.trim();
+const password=process.env.ADMIN_PASSWORD;
+if(!email||!email.includes('@')||!name||!password||password.length<16)throw new Error('Set ADMIN_EMAIL, ADMIN_NAME and ADMIN_PASSWORD (16+ characters) in your private environment.');
+await migrate();
+if(await db('users').where({role:'admin'}).first())throw new Error('An administrator already exists. This bootstrap command will not overwrite accounts.');
+await db('users').insert({id:randomUUID(),email,name,role:'admin',verified:true,active:true,password_hash:passwordHash(password),created_at:now()});
+console.log('Administrator provisioned. Remove ADMIN_PASSWORD from the environment now.');
+await db.destroy();

@@ -1,0 +1,290 @@
+{
+  "name": "Helm Track — Reliable notification delivery (A–D)",
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "saveDataSuccessExecution": "none",
+    "saveDataErrorExecution": "none",
+    "saveManualExecutions": false,
+    "executionTimeout": 120,
+    "timezone": "America/Chicago"
+  },
+  "nodes": [
+    {
+      "id": "d09979f3-39fc-4344-8222-e56ae62e2209",
+      "name": "Setup notes",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -40,
+        -280
+      ],
+      "parameters": {
+        "width": 1060,
+        "height": 220,
+        "content": "## Helm Track · Reliable notification delivery\nHandles new submissions + acknowledgment (A), approved retests (B), retest results (C), and information requests/replies (D).\n\n**Before publishing:** set the HTTPS app origin in Validate envelope; select Header Auth on the webhook (`X-Helm-Webhook-Secret`); select Resend Header Auth (`Authorization: Bearer …`) on Send via Resend. Do not put credentials into node text. The app outbox retries safely and rechecks issue status. Execution payload saving is disabled because notifications contain private data.\n\n**Provider accepted ≠ delivered.** Signed delivery/bounce webhooks go directly to the app."
+      }
+    },
+    {
+      "id": "0f76806f-c006-4798-8f94-04ccf73ca461",
+      "name": "Notification webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        0,
+        80
+      ],
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "helm-track-notifications",
+        "authentication": "headerAuth",
+        "responseMode": "onReceived",
+        "options": {}
+      },
+      "webhookId": "999cd790-2a2e-4b4d-a69f-1523ca35d95c"
+    },
+    {
+      "id": "d7d903f8-1f12-4970-9cf1-5b17494faa67",
+      "name": "Validate envelope",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        240,
+        80
+      ],
+      "parameters": {
+        "jsCode": "function validateDispatch(payload, expectedOrigin, clock = Date.now()) {\n  if (!expectedOrigin || !/^https:\\/\\/[a-z0-9.-]+(?::[0-9]+)?$/i.test(expectedOrigin)) {\n    throw new Error('Configure the HTTPS app origin in this node before enabling delivery.');\n  }\n  const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;\n  if (!payload || payload.schema_version !== 1 || !uuid.test(payload.delivery_id || '') || !uuid.test(payload.event_id || '')) {\n    throw new Error('Invalid notification envelope.');\n  }\n  if (typeof payload.capability !== 'string' || !/^[0-9a-f]{64}$/.test(payload.capability)) {\n    throw new Error('Invalid notification capability.');\n  }\n  if (!Number.isFinite(payload.timestamp) || Math.abs(clock - payload.timestamp) > 300000) {\n    throw new Error('Expired notification envelope.');\n  }\n  if (payload.base_url !== expectedOrigin) throw new Error('Application origin does not match the configured allowlist.');\n  return { delivery_id: payload.delivery_id, event_id: payload.event_id, capability: payload.capability, base_url: expectedOrigin };\n}\n\nconst APP_ORIGIN = ''; // REQUIRED: exact public HTTPS app origin, with no trailing slash.\nreturn [{json: validateDispatch($input.first().json.body, APP_ORIGIN)}];"
+      }
+    },
+    {
+      "id": "710e6304-8109-4061-89a4-1d0f7749f3a5",
+      "name": "Claim current notification",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        480,
+        80
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $('Validate envelope').first().json.base_url + '/api/integration/claim' }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "={{ 'Bearer ' + $('Validate envelope').first().json.capability }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ {} }}",
+        "options": {
+          "timeout": 20000
+        }
+      }
+    },
+    {
+      "id": "844dcf36-2158-426a-bde9-cb710a2eb0ca",
+      "name": "Send is authorized",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        720,
+        80
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "f25b9666-fa1e-472f-802a-54a00ac42ecd",
+              "leftValue": "={{ $json.send }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "ab7f84d0-6a5c-4381-9861-08cf3a13e7cd",
+      "name": "Send via Resend",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        960,
+        0
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.resend.com/emails",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Idempotency-Key",
+              "value": "={{ $json.idempotency_key }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ $json.email }}",
+        "options": {
+          "timeout": 20000,
+          "response": {
+            "response": {
+              "fullResponse": true,
+              "neverError": true,
+              "responseFormat": "json"
+            }
+          }
+        },
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth"
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "5fac7ba5-8a40-4dca-8428-7669c63b51f1",
+      "name": "Classify provider outcome",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1200,
+        0
+      ],
+      "parameters": {
+        "jsCode": "function classifyOutcome(response, executionId) {\n  const code = Number(response.statusCode || 0);\n  const body = response.body || {};\n  if (code >= 200 && code < 300 && typeof body.id === 'string' && body.id) {\n    return { state: 'provider-accepted', provider_id: body.id, execution_id: String(executionId) };\n  }\n  if (code === 429 || code >= 500 || !code || code >= 200 && code < 300) {\n    return { state: 'uncertain', error: 'unknown_outcome', execution_id: String(executionId) };\n  }\n  return { state: 'failed', error: 'provider_rejected', execution_id: String(executionId) };\n}\n\nreturn [{json:classifyOutcome($input.first().json, $execution.id)}];"
+      }
+    },
+    {
+      "id": "83e93987-9e64-415a-a4a5-a15d5e3216ae",
+      "name": "Record outcome",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1440,
+        0
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $('Validate envelope').first().json.base_url + '/api/integration/outcome' }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "={{ 'Bearer ' + $('Validate envelope').first().json.capability }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ $json }}",
+        "options": {
+          "timeout": 20000
+        }
+      }
+    },
+    {
+      "id": "d0230474-f5f2-4bd8-94c1-deb9d1f648df",
+      "name": "No send needed",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        960,
+        220
+      ],
+      "parameters": {}
+    }
+  ],
+  "connections": {
+    "Notification webhook": {
+      "main": [
+        [
+          {
+            "node": "Validate envelope",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validate envelope": {
+      "main": [
+        [
+          {
+            "node": "Claim current notification",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Claim current notification": {
+      "main": [
+        [
+          {
+            "node": "Send is authorized",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send is authorized": {
+      "main": [
+        [
+          {
+            "node": "Send via Resend",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "No send needed",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send via Resend": {
+      "main": [
+        [
+          {
+            "node": "Classify provider outcome",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Classify provider outcome": {
+      "main": [
+        [
+          {
+            "node": "Record outcome",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  }
+}

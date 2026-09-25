@@ -1,0 +1,112 @@
+{
+  "name": "Helm Track — Retest reminders and daily digest (E–F)",
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "saveDataSuccessExecution": "none",
+    "saveDataErrorExecution": "none",
+    "saveManualExecutions": false,
+    "executionTimeout": 120,
+    "timezone": "America/Chicago"
+  },
+  "nodes": [
+    {
+      "id": "10c8e4e4-2168-4ee4-888c-60590ab2572a",
+      "name": "Setup notes",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -30,
+        -260
+      ],
+      "parameters": {
+        "width": 800,
+        "height": 220,
+        "content": "## Retest reminders + daily admin digest\nRuns every 15 minutes. The app checks current status, retest cycle, reminder limits, and each digest’s configured timezone.\n\nSet the HTTPS origin in App URL. Select a Header Auth credential in Schedule due notifications: header `Authorization`, value `Bearer <N8N_SCHEDULER_SECRET>`. This secret is separate from the delivery webhook secret.\n\nThis workflow only queues eligible events. The app worker delivers them through the notification workflow. It never closes an issue."
+      }
+    },
+    {
+      "id": "385791fe-7430-4c3d-8bed-5b4943ebcb55",
+      "name": "Every 15 minutes",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        0,
+        40
+      ],
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "minutes",
+              "minutesInterval": 15
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "4ef0fdcb-d8b0-40e9-bc84-4c96def1e369",
+      "name": "App URL",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        240,
+        40
+      ],
+      "parameters": {
+        "jsCode": "const origin = ''; // REQUIRED: exact public HTTPS app origin.\nif (!origin.startsWith('https://') || !/^[a-z0-9.-]+(?::[0-9]+)?$/i.test(origin.slice(8))) throw new Error('Configure the HTTPS app origin.');\nreturn [{json:{origin,timestamp:Date.now(),nonce:'schedule-' + $execution.id}}];"
+      }
+    },
+    {
+      "id": "8c6c4ae2-b416-4af6-87bb-9358c5f0bb64",
+      "name": "Schedule due notifications",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        480,
+        40
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $json.origin + '/api/integration/schedule' }}",
+        "sendHeaders": false,
+        "headerParameters": {
+          "parameters": []
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ { timestamp: $json.timestamp, nonce: $json.nonce } }}",
+        "options": {
+          "timeout": 20000
+        },
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth"
+      }
+    }
+  ],
+  "connections": {
+    "Every 15 minutes": {
+      "main": [
+        [
+          {
+            "node": "App URL",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "App URL": {
+      "main": [
+        [
+          {
+            "node": "Schedule due notifications",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  }
+}
