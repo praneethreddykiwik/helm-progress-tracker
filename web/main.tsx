@@ -1382,9 +1382,8 @@ function App() {
                 </div>
 
                 <div className="field">
-                  <span>{form.type === 'Question' ? 'Context / What is unclear?' : form.type === 'Improvement' ? 'Why would this help / expected outcome?' : 'What did you expect?'}</span>
+                  <span>{form.type === 'Question' ? 'Context / What is unclear?' : form.type === 'Improvement' ? 'Why would this help / expected outcome?' : 'What did you expect?'} <em style={{ fontWeight: 400, opacity: 0.6 }}>(optional)</em></span>
                   <textarea
-                    required
                     rows={3}
                     placeholder={form.type === 'Question' ? 'Explain what scenario you are testing, what is ambiguous, or what should happen…' : form.type === 'Improvement' ? 'Explain the value or expected benefit…' : 'Describe what should have happened…'}
                     value={form.expected}

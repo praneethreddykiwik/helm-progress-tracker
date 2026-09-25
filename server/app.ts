@@ -49,7 +49,7 @@ export function createApp(){
       reporter_name:z.string().trim().min(2).max(100),
       reporter_role:z.enum(['tester','developer']).default('tester'),
       issue:z.string().trim().min(5).max(15000),
-      expected:z.string().trim().min(3).max(15000),
+      expected:z.string().trim().max(15000).default(''),
       assigned_to:z.string().trim().max(100).default(''),
       assigned_role:z.enum(['tester','developer','']).default(''),
       type:z.enum(['Bug','Improvement','Question']).default('Bug'),

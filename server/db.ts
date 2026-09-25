@@ -2,7 +2,7 @@ import 'dotenv/config';
 import knex from 'knex';
 import fs from 'node:fs';
 import path from 'node:path';
-export const dataDir = path.resolve(process.env.DATA_DIR || '.data');
+export const dataDir = path.resolve(process.env.DATA_DIR || (process.env.VERCEL ? '/tmp/helm-data' : '.data'));
 fs.mkdirSync(dataDir,{recursive:true});
 export const production = process.env.NODE_ENV === 'production';
 const postgres = !!process.env.DATABASE_URL;
