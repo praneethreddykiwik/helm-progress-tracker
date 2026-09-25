@@ -6,7 +6,7 @@ import path from 'node:path';
 import {randomUUID} from 'node:crypto';
 import request from 'supertest';
 import sharp from 'sharp';
-const dir=await mkdtemp(path.join(os.tmpdir(),'helm-test-'));process.env.DATA_DIR=dir;process.env.NODE_ENV='test';process.env.EMAIL_FROM='Helm Test <test@example.com>';
+const dir=await mkdtemp(path.join(os.tmpdir(),'helm-test-'));process.env.DATA_DIR=dir;process.env.NODE_ENV='test';process.env.EMAIL_FROM='Helm Test <test@example.com>';process.env.DATABASE_URL='';process.env.DATABASE_CA_FILE='';
 const {db,migrate,now}=await import('../server/db.js');const {passwordHash,hash}=await import('../server/auth.js');const {createApp}=await import('../server/app.js');const {schedule}=await import('../server/notifications.js');const {dispatch}=await import('../server/worker.js');
 const app=createApp();const admin=request.agent(app),tester=request.agent(app),other=request.agent(app);let project:string,uid:string,otherId:string,adminId:string,issue:any,attachment:string;
 const post=(agent:any,url:string,data:any)=>agent.post(url).set('X-Helm-Request','1').send(data);

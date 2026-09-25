@@ -6,3 +6,4 @@ dist/
 .data/
 .firecrawl/
 *.log
+.claude/
