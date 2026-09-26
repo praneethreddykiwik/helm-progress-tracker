@@ -7,7 +7,9 @@ fs.mkdirSync(dataDir,{recursive:true});
 export const production = process.env.NODE_ENV === 'production';
 const postgres = !!process.env.DATABASE_URL;
 if(production && (!postgres || !process.env.SESSION_SECRET || process.env.SESSION_SECRET.length<32 || !process.env.APP_URL?.startsWith('https://') || !process.env.S3_ENDPOINT)) throw new Error('Production requires Postgres, SESSION_SECRET (32+ characters), HTTPS APP_URL and private S3 storage');
-export const db = knex(postgres ? {client:'pg',connection:{connectionString:process.env.DATABASE_URL,ssl:production?{rejectUnauthorized:true,...(process.env.DATABASE_CA_FILE?{ca:fs.readFileSync(process.env.DATABASE_CA_FILE,'utf8')}:{})}:undefined},searchPath:[process.env.DATABASE_SCHEMA||'helm'],pool:{min:0,max:8}} : {client:'better-sqlite3',connection:{filename:path.join(dataDir,'helm.sqlite')},useNullAsDefault:true,pool:{min:1,max:1,afterCreate:(conn:any,done:any)=>{conn.pragma('foreign_keys = ON');conn.pragma('journal_mode = WAL');done(null,conn);}}});
+const caFile=process.env.DATABASE_CA_FILE||'';
+const ca=caFile?(caFile.includes('BEGIN CERTIFICATE')?caFile:fs.readFileSync(caFile,'utf8')):undefined;
+export const db = knex(postgres ? {client:'pg',connection:{connectionString:process.env.DATABASE_URL,ssl:production?{rejectUnauthorized:true,...(ca?{ca}:{})}:undefined},searchPath:[process.env.DATABASE_SCHEMA||'helm'],pool:{min:0,max:8}} : {client:'better-sqlite3',connection:{filename:path.join(dataDir,'helm.sqlite')},useNullAsDefault:true,pool:{min:1,max:1,afterCreate:(conn:any,done:any)=>{conn.pragma('foreign_keys = ON');conn.pragma('journal_mode = WAL');done(null,conn);}}});
 export const now = () => new Date().toISOString();
 export async function migrate(){
   if(postgres){const schema=process.env.DATABASE_SCHEMA||'helm';if(!/^[a-z_][a-z0-9_]*$/.test(schema))throw new Error('Invalid schema');await db.raw(`CREATE SCHEMA IF NOT EXISTS "${schema}"`);}

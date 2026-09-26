@@ -7,3 +7,5 @@ dist/
 .firecrawl/
 *.log
 .claude/
+.vercel
+.env*
